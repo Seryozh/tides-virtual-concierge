@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { openai } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import { streamText, convertToModelMessages } from "ai";
 import { z } from "zod";
 
 // 1. Edge Runtime (Crucial for <200ms latency)
@@ -13,12 +13,33 @@ const supabase = createClient(
 );
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  const { messages, unitNumber, sessionId } = await req.json();
+
+  // Convert UIMessages to ModelMessages
+  const modelMessages = await convertToModelMessages(messages);
+
+  // Load conversation history if sessionId provided
+  let contextMessages = modelMessages;
+  if (sessionId) {
+    const { data: history } = await supabase
+      .from("conversations")
+      .select("messages")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: true })
+      .limit(10); // Last 10 exchanges for context
+
+    if (history && history.length > 0) {
+      const historicalMessages = history.flatMap((h: any) => h.messages);
+      const convertedHistory = await convertToModelMessages(historicalMessages);
+      contextMessages = [...convertedHistory, ...modelMessages];
+    }
+  }
 
   const result = streamText({
     model: openai("gpt-4o"),
-    messages,
+    messages: contextMessages,
     system: `You are Tides, an advanced Voice Concierge for a luxury building.
+             ${unitNumber ? `The resident is from Unit ${unitNumber}.` : ''}
 
              STYLE GUIDE:
              - Speak conversationally and concisely.
@@ -88,6 +109,25 @@ export async function POST(req: Request) {
       },
     },
   });
+
+  // Save this conversation exchange (async, non-blocking)
+  if (sessionId) {
+    // Extract the final text and save after streaming completes
+    const response = result.toTextStreamResponse();
+
+    // Clone the response to read it without consuming the stream
+    const responseClone = response.clone();
+    responseClone.text().then(async (finalText) => {
+      await supabase.from("conversations").insert({
+        session_id: sessionId,
+        unit_number: unitNumber || null,
+        messages: [...messages, { role: "assistant", parts: [{ type: "text", text: finalText }] }],
+        created_at: new Date().toISOString()
+      });
+    }).catch(err => console.error('Failed to save conversation:', err));
+
+    return response;
+  }
 
   return result.toTextStreamResponse();
 }
