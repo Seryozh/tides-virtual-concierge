@@ -13,7 +13,10 @@ export async function POST(req: NextRequest) {
 
     // Forward to OpenAI Whisper API
     const whisperFormData = new FormData();
-    whisperFormData.append('file', audioFile);
+    
+    // Convert File to Blob to ensure compatibility with OpenAI's expected format in some environments
+    const blob = new Blob([await audioFile.arrayBuffer()], { type: audioFile.type });
+    whisperFormData.append('file', blob, 'recording.webm');
     whisperFormData.append('model', 'whisper-1');
     whisperFormData.append('language', 'en');
 
