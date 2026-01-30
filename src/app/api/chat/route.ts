@@ -51,7 +51,6 @@ export async function POST(req: Request) {
              - You have DIRECT access to the building's database.
              - Always check the database for ground truth.
              - You can check packages and book amenities.`,
-    maxSteps: 5,
     tools: {
       checkPackages: {
         description: "Check if a specific unit has pending packages.",
@@ -117,6 +116,22 @@ export async function POST(req: Request) {
           return `Booked ${amenity} for unit ${unitNumber}.`;
         },
       },
+    },
+    // @ts-ignore
+    maxSteps: 5,
+    onFinish: async ({ text }) => {
+      if (sessionId) {
+        try {
+          await supabase.from("conversations").insert({
+            session_id: sessionId,
+            unit_number: unitNumber || null,
+            messages: [...messages, { role: "assistant", parts: [{ type: "text", text }] }],
+            created_at: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error('Failed to save conversation:', err);
+        }
+      }
     },
   });
 
