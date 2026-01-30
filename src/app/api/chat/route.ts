@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { openai } from "@ai-sdk/openai";
-import { streamText, convertToModelMessages } from "ai";
+import { generateText, streamText, convertToModelMessages } from "ai";
 import { z } from "zod";
 
 // 1. Edge Runtime (Crucial for <200ms latency)
@@ -117,9 +117,9 @@ export async function POST(req: Request) {
         },
       },
     },
-    // @ts-ignore
     maxSteps: 5,
     onFinish: async ({ text }) => {
+      // Save this conversation exchange (async, non-blocking)
       if (sessionId) {
         try {
           await supabase.from("conversations").insert({
@@ -134,15 +134,6 @@ export async function POST(req: Request) {
       }
     },
   });
-
-  // Save this conversation exchange (async, non-blocking)
-  if (sessionId) {
-    // We need to handle the stream properly to save it
-    // The AI SDK provides onFinish for this purpose
-    return result.toTextStreamResponse({
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    });
-  }
 
   return result.toTextStreamResponse();
 }
