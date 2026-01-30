@@ -38,7 +38,6 @@ export async function POST(req: Request) {
   const result = streamText({
     model: openai("gpt-4o"),
     messages: contextMessages,
-    maxSteps: 5,
     system: `You are Tides, an advanced Voice Concierge for a luxury building.
              ${unitNumber ? `The resident is from Unit ${unitNumber}.` : ''}
 
@@ -52,22 +51,7 @@ export async function POST(req: Request) {
              - You have DIRECT access to the building's database.
              - Always check the database for ground truth.
              - You can check packages and book amenities.`,
-
-    onFinish: async ({ text }) => {
-      if (sessionId) {
-        try {
-          await supabase.from("conversations").insert({
-            session_id: sessionId,
-            unit_number: unitNumber || null,
-            messages: [...messages, { role: "assistant", parts: [{ type: "text", text }] }],
-            created_at: new Date().toISOString()
-          });
-        } catch (err) {
-          console.error('Failed to save conversation:', err);
-        }
-      }
-    },
-
+    maxSteps: 5,
     tools: {
       checkPackages: {
         description: "Check if a specific unit has pending packages.",
