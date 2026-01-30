@@ -7,14 +7,25 @@ import { Mic, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function Home() {
-  const sessionId = useRef(crypto.randomUUID()).current; // Persistent session ID
+  const [sessionId, setSessionId] = useState<string>("");
   const [unitNumber, setUnitNumber] = useState<string>("101"); // Demo unit
+
+  useEffect(() => {
+    setSessionId(crypto.randomUUID());
+  }, []);
 
   const { messages, sendMessage, status } = useChat({
     transport: new TextStreamChatTransport({
       api: "/api/chat",
       body: { sessionId, unitNumber } // Pass session context
-    })
+    }),
+    onFinish: (message) => {
+      console.log("Chat finished:", message);
+    },
+    onError: (err) => {
+      console.error("Chat error:", err);
+      setError("Chat connection failed");
+    }
   });
 
   const [isListening, setIsListening] = useState(false);
@@ -157,11 +168,13 @@ export default function Home() {
   };
 
   // Auto-Speak the AI's response
+  const lastSpokenMessageId = useRef<string | null>(null);
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
-    if (lastMessage?.role === "assistant" && status === "ready") {
+    if (lastMessage?.role === "assistant" && status === "ready" && lastMessage.id !== lastSpokenMessageId.current) {
       const text = getMessageText(lastMessage);
       if (text) {
+        lastSpokenMessageId.current = lastMessage.id;
         // Try ElevenLabs first, fallback to browser TTS
         speakWithElevenLabs(text).catch(() => speakWithBrowser(text));
       }
@@ -298,7 +311,7 @@ export default function Home() {
         </div>
         <div>State: {OrbState.toUpperCase()}</div>
         <div>Messages: {messages.length}</div>
-        <div>Session: {sessionId.substring(0, 8)}...</div>
+        <div>Session: {sessionId ? `${sessionId.substring(0, 8)}...` : "Initializing..."}</div>
         <div className="mt-2 text-[10px] text-zinc-600">
           {isListening && "🎤 RECORDING"}
         </div>

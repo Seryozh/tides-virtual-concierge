@@ -38,6 +38,7 @@ export async function POST(req: Request) {
   const result = streamText({
     model: openai("gpt-4o"),
     messages: contextMessages,
+    maxSteps: 5,
     system: `You are Tides, an advanced Voice Concierge for a luxury building.
              ${unitNumber ? `The resident is from Unit ${unitNumber}.` : ''}
 
@@ -52,6 +53,21 @@ export async function POST(req: Request) {
              - Always check the database for ground truth.
              - You can check packages and book amenities.`,
 
+    onFinish: async ({ text }) => {
+      if (sessionId) {
+        try {
+          await supabase.from("conversations").insert({
+            session_id: sessionId,
+            unit_number: unitNumber || null,
+            messages: [...messages, { role: "assistant", parts: [{ type: "text", text }] }],
+            created_at: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error('Failed to save conversation:', err);
+        }
+      }
+    },
+
     tools: {
       checkPackages: {
         description: "Check if a specific unit has pending packages.",
@@ -59,17 +75,27 @@ export async function POST(req: Request) {
           unitNumber: z.string().describe("The resident's unit number, e.g. '101'")
         }),
         execute: async ({ unitNumber }: { unitNumber: string }) => {
-          const { data, error } = await supabase
-            .from("packages")
-            .select("*")
-            .eq("unit_number", unitNumber)
-            .eq("status", "pending");
+          console.log(`[checkPackages] Checking for unit: ${unitNumber}`);
+          try {
+            const { data, error } = await supabase
+              .from("packages")
+              .select("*")
+              .eq("unit_number", unitNumber)
+              .eq("status", "pending");
 
-          if (error) return "System Error: Database unreachable.";
-          if (!data || data.length === 0) return "No pending packages found.";
+            if (error) {
+              console.error("[checkPackages] Database error:", error);
+              return "System Error: Database unreachable.";
+            }
+            console.log(`[checkPackages] Found ${data?.length || 0} packages`);
+            if (!data || data.length === 0) return "No pending packages found.";
 
-          const couriers = data.map((p: any) => p.courier).join(" and ");
-          return `Found ${data.length} packages from ${couriers}.`;
+            const couriers = data.map((p: any) => p.courier).join(" and ");
+            return `Found ${data.length} packages from ${couriers}.`;
+          } catch (err) {
+            console.error("[checkPackages] Unexpected error:", err);
+            return "System Error: An unexpected error occurred.";
+          }
         },
       },
 
@@ -112,21 +138,11 @@ export async function POST(req: Request) {
 
   // Save this conversation exchange (async, non-blocking)
   if (sessionId) {
-    // Extract the final text and save after streaming completes
-    const response = result.toTextStreamResponse();
-
-    // Clone the response to read it without consuming the stream
-    const responseClone = response.clone();
-    responseClone.text().then(async (finalText) => {
-      await supabase.from("conversations").insert({
-        session_id: sessionId,
-        unit_number: unitNumber || null,
-        messages: [...messages, { role: "assistant", parts: [{ type: "text", text: finalText }] }],
-        created_at: new Date().toISOString()
-      });
-    }).catch(err => console.error('Failed to save conversation:', err));
-
-    return response;
+    // We need to handle the stream properly to save it
+    // The AI SDK provides onFinish for this purpose
+    return result.toTextStreamResponse({
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
   }
 
   return result.toTextStreamResponse();
