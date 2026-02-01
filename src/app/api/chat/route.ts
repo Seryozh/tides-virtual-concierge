@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { openai } from "@ai-sdk/openai";
-import { generateText, streamText, convertToModelMessages } from "ai";
+import { generateText, streamText, convertToModelMessages, stepCountIs } from "ai";
 import { z } from "zod";
 
 // 1. Edge Runtime (Crucial for <200ms latency)
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
         },
       },
     },
-    maxSteps: 5,
+    stopWhen: stepCountIs(5),
     onFinish: async ({ text }) => {
       // Save this conversation exchange (async, non-blocking)
       if (sessionId) {
