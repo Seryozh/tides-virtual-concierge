@@ -50,7 +50,7 @@ export async function POST(req: Request) {
              CAPABILITIES:
              - You have DIRECT access to the building's database.
              - Always check the database for ground truth.
-             - You can check packages and book amenities.`,
+             - You can check package deliveries and confirm pickups.`,
     tools: {
       checkPackages: {
         description: "Check if a specific unit has pending packages.",
@@ -93,27 +93,6 @@ export async function POST(req: Request) {
 
           if (error) return "Failed to update.";
           return "Successfully logged pickup.";
-        },
-      },
-
-      bookAmenity: {
-        description: "Book an amenity (Tennis, BBQ, Spa) for a resident.",
-        inputSchema: z.object({
-          unitNumber: z.string(),
-          amenity: z.enum(["Tennis Court", "BBQ Area", "Spa"]),
-          time: z.string().describe("ISO timestamp or natural time (e.g., 'tomorrow at 2pm')")
-        }),
-        execute: async ({ unitNumber, amenity }: { unitNumber: string; amenity: string }) => {
-          const { error } = await supabase
-            .from("bookings")
-            .insert({
-              unit_number: unitNumber,
-              amenity: amenity,
-              booking_time: new Date().toISOString()
-            });
-
-          if (error) return "Booking failed.";
-          return `Booked ${amenity} for unit ${unitNumber}.`;
         },
       },
     },
