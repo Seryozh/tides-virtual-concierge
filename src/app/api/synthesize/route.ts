@@ -1,17 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+/**
+ * Edge Runtime Configuration
+ * Enables fast text-to-speech generation
+ */
 export const runtime = 'edge';
 
+/**
+ * Synthesize API Route - Text-to-Speech endpoint
+ *
+ * Converts text responses to natural-sounding speech using ElevenLabs API.
+ * Supports language-specific voice selection for English and Spanish.
+ *
+ * @param req - JSON containing text and language parameter
+ * @returns Audio stream (MP3 format)
+ */
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json();
+    const { text, language = 'en' } = await req.json();
 
     if (!text) {
       return NextResponse.json({ error: 'No text provided' }, { status: 400 });
     }
 
-    const voiceId = process.env.ELEVENLABS_VOICE_ID;
+    // Select voice based on language
+    // English voice: default from env, Spanish voice: use multilingual model
     const apiKey = process.env.ELEVENLABS_API_KEY;
+    const voiceId = language === 'es'
+      ? (process.env.ELEVENLABS_VOICE_ID_ES || process.env.ELEVENLABS_VOICE_ID) // Fallback to default if Spanish voice not configured
+      : process.env.ELEVENLABS_VOICE_ID;
 
     if (!voiceId || !apiKey) {
       return NextResponse.json({ error: 'ElevenLabs not configured' }, { status: 500 });

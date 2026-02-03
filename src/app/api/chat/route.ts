@@ -3,17 +3,32 @@ import { openai } from "@ai-sdk/openai";
 import { generateText, streamText, convertToModelMessages, stepCountIs } from "ai";
 import { z } from "zod";
 
-// 1. Edge Runtime (Crucial for <200ms latency)
+/**
+ * Edge Runtime Configuration
+ * Enables sub-200ms response latency by running on edge nodes close to users
+ */
 export const runtime = "edge";
 
-// 2. Connect to Supabase
+/**
+ * Supabase Client Instance
+ * Provides access to the building database (packages, bookings, conversations)
+ */
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+/**
+ * Chat API Route - Main conversational AI endpoint
+ *
+ * Processes user messages with GPT-4o, maintains conversation context,
+ * and enables database access through tool calling.
+ *
+ * @param req - Request containing messages, unitNumber, sessionId, and language
+ * @returns Streamed text response from GPT-4o
+ */
 export async function POST(req: Request) {
-  const { messages, unitNumber, sessionId } = await req.json();
+  const { messages, unitNumber, sessionId, language = 'en' } = await req.json();
 
   // Convert UIMessages to ModelMessages
   const modelMessages = await convertToModelMessages(messages);
@@ -35,22 +50,44 @@ export async function POST(req: Request) {
     }
   }
 
+  // Bilingual system prompts
+  const systemPrompts = {
+    en: `You are Tides, an advanced Voice Concierge for a luxury residential building.
+         ${unitNumber ? `The resident is from Unit ${unitNumber}.` : ''}
+
+         LANGUAGE: Respond in English.
+
+         STYLE GUIDE:
+         - Speak conversationally and concisely.
+         - Do not output markdown lists (bullet points sound bad in TTS).
+         - Use short sentences.
+         - If you take an action (like checking the DB), say "Checking that for you..." first.
+
+         CAPABILITIES:
+         - You have DIRECT access to the building's database.
+         - Always check the database for ground truth.
+         - You can check package deliveries and confirm pickups.`,
+    es: `Eres Tides, un Conserje Virtual avanzado para un edificio residencial de lujo.
+         ${unitNumber ? `El residente es de la Unidad ${unitNumber}.` : ''}
+
+         IDIOMA: Responde en español.
+
+         GUÍA DE ESTILO:
+         - Habla de manera conversacional y concisa.
+         - No uses listas con viñetas (suenan mal en texto a voz).
+         - Usa oraciones cortas.
+         - Si realizas una acción (como consultar la base de datos), di "Déjame verificar eso..." primero.
+
+         CAPACIDADES:
+         - Tienes acceso DIRECTO a la base de datos del edificio.
+         - Siempre verifica la base de datos para obtener información precisa.
+         - Puedes verificar entregas de paquetes y confirmar recolecciones.`
+  };
+
   const result = streamText({
     model: openai("gpt-4o"),
     messages: contextMessages,
-    system: `You are Tides, an advanced Voice Concierge for a luxury building.
-             ${unitNumber ? `The resident is from Unit ${unitNumber}.` : ''}
-
-             STYLE GUIDE:
-             - Speak conversationally and concisely.
-             - Do not output markdown lists (bullet points sound bad in TTS).
-             - Use short sentences.
-             - If you take an action (like checking the DB), say "Checking that for you..." first.
-
-             CAPABILITIES:
-             - You have DIRECT access to the building's database.
-             - Always check the database for ground truth.
-             - You can check package deliveries and confirm pickups.`,
+    system: systemPrompts[language as 'en' | 'es'] || systemPrompts.en,
     tools: {
       checkPackages: {
         description: "Check if a specific unit has pending packages.",

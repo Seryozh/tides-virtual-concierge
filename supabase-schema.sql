@@ -46,12 +46,66 @@ INSERT INTO packages (unit_number, courier, status) VALUES
   ('205', 'DHL', 'picked_up')
 ON CONFLICT DO NOTHING;
 
--- Enable Row Level Security (RLS) for production
+-- ============================================
+-- ROW LEVEL SECURITY POLICIES
+-- ============================================
+-- Note: This is a public kiosk application with no user authentication.
+-- RLS policies are designed to prevent accidental data corruption while
+-- allowing the concierge system to function properly.
+
 ALTER TABLE packages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 
--- Policy: Allow all operations for authenticated users (for now)
-CREATE POLICY "Allow all operations" ON packages FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON bookings FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON conversations FOR ALL USING (true);
+-- PACKAGES POLICIES
+-- Allow reading all packages (for checking status)
+CREATE POLICY "Allow read packages" ON packages
+  FOR SELECT USING (true);
+
+-- Allow inserting new packages (when deliveries arrive)
+CREATE POLICY "Allow insert packages" ON packages
+  FOR INSERT WITH CHECK (true);
+
+-- Allow updating package status (for pickup confirmation)
+CREATE POLICY "Allow update packages" ON packages
+  FOR UPDATE USING (true)
+  WITH CHECK (status IN ('pending', 'picked_up'));
+
+-- Prevent deletion of packages (audit trail)
+CREATE POLICY "Prevent delete packages" ON packages
+  FOR DELETE USING (false);
+
+-- BOOKINGS POLICIES
+-- Allow reading all bookings (to check availability)
+CREATE POLICY "Allow read bookings" ON bookings
+  FOR SELECT USING (true);
+
+-- Allow creating new bookings
+CREATE POLICY "Allow insert bookings" ON bookings
+  FOR INSERT WITH CHECK (
+    booking_time > NOW() AND  -- Only future bookings
+    booking_time < NOW() + INTERVAL '30 days'  -- Max 30 days ahead
+  );
+
+-- Prevent updates and deletes (bookings are immutable once created)
+CREATE POLICY "Prevent update bookings" ON bookings
+  FOR UPDATE USING (false);
+
+CREATE POLICY "Prevent delete bookings" ON bookings
+  FOR DELETE USING (false);
+
+-- CONVERSATIONS POLICIES
+-- Allow reading recent conversations (for context retrieval)
+CREATE POLICY "Allow read recent conversations" ON conversations
+  FOR SELECT USING (created_at > NOW() - INTERVAL '7 days');
+
+-- Allow creating new conversation records
+CREATE POLICY "Allow insert conversations" ON conversations
+  FOR INSERT WITH CHECK (true);
+
+-- Prevent updates and deletes (conversations are append-only)
+CREATE POLICY "Prevent update conversations" ON conversations
+  FOR UPDATE USING (false);
+
+CREATE POLICY "Prevent delete conversations" ON conversations
+  FOR DELETE USING (false);

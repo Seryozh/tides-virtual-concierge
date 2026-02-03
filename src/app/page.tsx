@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 export default function Home() {
   const [sessionId, setSessionId] = useState<string>("");
   const [unitNumber, setUnitNumber] = useState<string>("101"); // Demo unit
+  const [language, setLanguage] = useState<"en" | "es">("en"); // Language selection
 
   useEffect(() => {
     setSessionId(crypto.randomUUID());
@@ -17,7 +18,7 @@ export default function Home() {
   const { messages, sendMessage, status } = useChat({
     transport: new TextStreamChatTransport({
       api: "/api/chat",
-      body: { sessionId, unitNumber } // Pass session context
+      body: { sessionId, unitNumber, language } // Pass session context and language
     }),
     onFinish: (message) => {
       console.log("Chat finished:", message);
@@ -94,6 +95,7 @@ export default function Home() {
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('language', language); // Pass selected language
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -124,7 +126,7 @@ export default function Home() {
       const response = await fetch('/api/synthesize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, language }), // Pass language for voice selection
       });
 
       if (!response.ok) {
@@ -193,16 +195,30 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-zinc-900 to-black text-white p-4">
-      {/* Unit Number Selector (Top Right) */}
-      <div className="fixed top-4 right-4 flex items-center gap-2 bg-zinc-900/80 backdrop-blur rounded-lg p-3 border border-zinc-800">
-        <span className="text-xs text-zinc-400">Unit:</span>
-        <input
-          type="text"
-          value={unitNumber}
-          onChange={(e) => setUnitNumber(e.target.value)}
-          className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:outline-none focus:border-blue-500"
-          placeholder="101"
-        />
+      {/* Unit Number & Language Selector (Top Right) */}
+      <div className="fixed top-4 right-4 flex items-center gap-4 bg-zinc-900/80 backdrop-blur rounded-lg p-3 border border-zinc-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-400">Unit:</span>
+          <input
+            type="text"
+            value={unitNumber}
+            onChange={(e) => setUnitNumber(e.target.value)}
+            className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:outline-none focus:border-blue-500"
+            placeholder="101"
+          />
+        </div>
+        <div className="h-4 w-px bg-zinc-700" />
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-400">Language:</span>
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as "en" | "es")}
+            className="px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+          >
+            <option value="en">🇺🇸 English</option>
+            <option value="es">🇪🇸 Español</option>
+          </select>
+        </div>
       </div>
 
       {/* --- THE ORB BACKGROUND GLOW --- */}
@@ -251,10 +267,10 @@ export default function Home() {
         </h1>
 
         <p className="text-sm text-zinc-500 uppercase tracking-widest">
-          {OrbState === "listening" && "🎤 Hold to record..."}
-          {OrbState === "thinking" && "Processing..."}
-          {OrbState === "speaking" && "Speaking..."}
-          {OrbState === "idle" && "Press and hold to speak"}
+          {OrbState === "listening" && (language === "es" ? "🎤 Mantén presionado para grabar..." : "🎤 Hold to record...")}
+          {OrbState === "thinking" && (language === "es" ? "Procesando..." : "Processing...")}
+          {OrbState === "speaking" && (language === "es" ? "Hablando..." : "Speaking...")}
+          {OrbState === "idle" && (language === "es" ? "Mantén presionado para hablar" : "Press and hold to speak")}
         </p>
 
         {/* Error Display */}
@@ -267,7 +283,7 @@ export default function Home() {
         <div className="min-h-[120px] text-xl leading-relaxed text-zinc-100 px-6">
           {messages.length > 0
             ? getMessageText(messages[messages.length - 1])
-            : "Press and hold the microphone to speak"}
+            : (language === "es" ? "Mantén presionado el micrófono para hablar" : "Press and hold the microphone to speak")}
         </div>
 
         {/* Text Input for Testing */}
@@ -277,7 +293,7 @@ export default function Home() {
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendTextMessage()}
-            placeholder="Or type a message..."
+            placeholder={language === "es" ? "O escribe un mensaje..." : "Or type a message..."}
             className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-white"
           />
           <button
@@ -291,31 +307,43 @@ export default function Home() {
 
         {/* Instructions */}
         <div className="text-sm text-zinc-500 space-y-2">
-          <p>Try asking:</p>
+          <p>{language === "es" ? "Prueba preguntando:" : "Try asking:"}</p>
           <div className="flex flex-wrap gap-2 justify-center">
-            <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"Do I have any packages?"</span>
-            <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"Book the tennis court"</span>
-            <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"Hello"</span>
+            {language === "es" ? (
+              <>
+                <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"¿Tengo paquetes?"</span>
+                <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"Reservar la cancha de tenis"</span>
+                <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"Hola"</span>
+              </>
+            ) : (
+              <>
+                <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"Do I have any packages?"</span>
+                <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"Book the tennis court"</span>
+                <span className="px-3 py-1 bg-zinc-800 rounded-full text-xs">"Hello"</span>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* --- DEBUG: SYSTEM STATUS --- */}
-      <div className="fixed bottom-4 left-4 p-4 bg-zinc-900/80 backdrop-blur rounded-xl border border-zinc-800 text-xs text-zinc-400 font-mono">
-        <div className="flex items-center gap-2 mb-2">
-          <div className={cn(
-            "w-2 h-2 rounded-full",
-            status === "ready" ? "bg-green-500" : "bg-yellow-500 animate-pulse"
-          )} />
-          <span>System {status.toUpperCase()}</span>
+      {/* --- DEBUG: SYSTEM STATUS (Development Only) --- */}
+      {process.env.NEXT_PUBLIC_DEBUG_MODE === 'true' && (
+        <div className="fixed bottom-4 left-4 p-4 bg-zinc-900/80 backdrop-blur rounded-xl border border-zinc-800 text-xs text-zinc-400 font-mono">
+          <div className="flex items-center gap-2 mb-2">
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              status === "ready" ? "bg-green-500" : "bg-yellow-500 animate-pulse"
+            )} />
+            <span>System {status.toUpperCase()}</span>
+          </div>
+          <div>State: {OrbState.toUpperCase()}</div>
+          <div>Messages: {messages.length}</div>
+          <div>Session: {sessionId ? `${sessionId.substring(0, 8)}...` : "Initializing..."}</div>
+          <div className="mt-2 text-[10px] text-zinc-600">
+            {isListening && "🎤 RECORDING"}
+          </div>
         </div>
-        <div>State: {OrbState.toUpperCase()}</div>
-        <div>Messages: {messages.length}</div>
-        <div>Session: {sessionId ? `${sessionId.substring(0, 8)}...` : "Initializing..."}</div>
-        <div className="mt-2 text-[10px] text-zinc-600">
-          {isListening && "🎤 RECORDING"}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
